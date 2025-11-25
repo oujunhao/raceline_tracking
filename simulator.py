@@ -13,11 +13,11 @@ from controller import lower_controller, controller
 class Simulator:
 
     def __init__(self, rt : RaceTrack):
-        matplotlib.rcParams["figure.dpi"] = 300
+        matplotlib.rcParams["figure.dpi"] = 100
         matplotlib.rcParams["font.size"] = 8
 
         self.rt = rt
-        self.figure, self.axis = plt.subplots(1, 1, figsize=(16, 10))
+        self.figure, self.axis = plt.subplots(1, 1, figsize=(12, 7.5))
         plt.subplots_adjust(bottom=0.25)
 
         self.axis.set_xlabel("X"); self.axis.set_ylabel("Y")
@@ -37,13 +37,24 @@ class Simulator:
         ax_ki = plt.axes([0.25, 0.06, 0.65, 0.03], facecolor=axcolor)
         ax_kd = plt.axes([0.25, 0.02, 0.65, 0.03], facecolor=axcolor)
 
+        ax_vkp = plt.axes([0.25, 0.22, 0.65, 0.03], facecolor=axcolor)
+        ax_vki = plt.axes([0.25, 0.18, 0.65, 0.03], facecolor=axcolor)
+        ax_vkd = plt.axes([0.25, 0.14, 0.65, 0.03], facecolor=axcolor)
+
         self.slider_kp = Slider(ax_kp, 'Steer Kp', 0.0, 20.0, valinit=lower_controller.steering_kp)
         self.slider_ki = Slider(ax_ki, 'Steer Ki', 0.0, 1.0, valinit=lower_controller.steering_ki)
         self.slider_kd = Slider(ax_kd, 'Steer Kd', 0.0, 5.0, valinit=lower_controller.steering_kd)
 
+        self.slider_vkp = Slider(ax_vkp, 'Vel Kp', 0.0, 20.0, valinit=lower_controller.velocity_kp)
+        self.slider_vki = Slider(ax_vki, 'Vel Ki', 0.0, 1.0, valinit=lower_controller.velocity_ki)
+        self.slider_vkd = Slider(ax_vkd, 'Vel Kd', 0.0, 5.0, valinit=lower_controller.velocity_kd)
+
         self.slider_kp.on_changed(self.update_sliders)
         self.slider_ki.on_changed(self.update_sliders)
         self.slider_kd.on_changed(self.update_sliders)
+        self.slider_vkp.on_changed(self.update_sliders)
+        self.slider_vki.on_changed(self.update_sliders)
+        self.slider_vkd.on_changed(self.update_sliders)
 
         # Reset Button
         resetax = plt.axes([0.025, 0.05, 0.1, 0.04])
@@ -54,6 +65,9 @@ class Simulator:
         lower_controller.steering_kp = self.slider_kp.val
         lower_controller.steering_ki = self.slider_ki.val
         lower_controller.steering_kd = self.slider_kd.val
+        lower_controller.velocity_kp = self.slider_vkp.val
+        lower_controller.velocity_ki = self.slider_vki.val
+        lower_controller.velocity_kd = self.slider_vkd.val
 
     def reset_simulation(self, event):
         self.car = RaceCar(self.rt.initial_state.T)

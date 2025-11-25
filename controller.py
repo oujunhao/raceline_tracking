@@ -105,8 +105,7 @@ def controller(
 
     # New velocity is proportional to the distance to the lookahead point
     distance_to_lookahead = np.linalg.norm(lookahead_point - np.array([x, y]))
-    desired_velocity = min(150.0, distance_to_lookahead * 2.0)
-    desired_velocity = 10
+    desired_velocity = min(100.0, distance_to_lookahead * 2.0)
     
     
     return np.array([desired_angle, desired_velocity]).T, lookahead_point
