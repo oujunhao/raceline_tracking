@@ -2,6 +2,7 @@ import numpy as np
 
 import matplotlib
 import matplotlib.pyplot as plt
+from matplotlib.widgets import Slider, Button
 
 from time import time
 
@@ -16,7 +17,8 @@ class Simulator:
         matplotlib.rcParams["font.size"] = 8
 
         self.rt = rt
-        self.figure, self.axis = plt.subplots(1, 1)
+        self.figure, self.axis = plt.subplots(1, 1, figsize=(16, 10))
+        plt.subplots_adjust(bottom=0.25)
 
         self.axis.set_xlabel("X"); self.axis.set_ylabel("Y")
 
@@ -28,6 +30,44 @@ class Simulator:
         self.lap_started = False
         self.track_limit_violations = 0
         self.currently_violating = False
+
+        # Sliders
+        axcolor = 'lightgoldenrodyellow'
+        ax_kp = plt.axes([0.25, 0.1, 0.65, 0.03], facecolor=axcolor)
+        ax_ki = plt.axes([0.25, 0.06, 0.65, 0.03], facecolor=axcolor)
+        ax_kd = plt.axes([0.25, 0.02, 0.65, 0.03], facecolor=axcolor)
+
+        self.slider_kp = Slider(ax_kp, 'Steer Kp', 0.0, 20.0, valinit=lower_controller.steering_kp)
+        self.slider_ki = Slider(ax_ki, 'Steer Ki', 0.0, 1.0, valinit=lower_controller.steering_ki)
+        self.slider_kd = Slider(ax_kd, 'Steer Kd', 0.0, 5.0, valinit=lower_controller.steering_kd)
+
+        self.slider_kp.on_changed(self.update_sliders)
+        self.slider_ki.on_changed(self.update_sliders)
+        self.slider_kd.on_changed(self.update_sliders)
+
+        # Reset Button
+        resetax = plt.axes([0.025, 0.05, 0.1, 0.04])
+        self.button = Button(resetax, 'Reset', color=axcolor, hovercolor='0.975')
+        self.button.on_clicked(self.reset_simulation)
+
+    def update_sliders(self, val):
+        lower_controller.steering_kp = self.slider_kp.val
+        lower_controller.steering_ki = self.slider_ki.val
+        lower_controller.steering_kd = self.slider_kd.val
+
+    def reset_simulation(self, event):
+        self.car = RaceCar(self.rt.initial_state.T)
+        self.lap_time_elapsed = 0
+        self.lap_start_time = time()
+        self.lap_finished = False
+        self.lap_started = False
+        self.track_limit_violations = 0
+        self.currently_violating = False
+        
+        lower_controller.prev_steering_error = 0.0
+        lower_controller.integral_steering_error = 0.0
+        lower_controller.prev_velocity_error = 0.0
+        lower_controller.integral_velocity_error = 0.0
 
     def check_track_limits(self):
         car_position = self.car.state[0:2]
@@ -78,7 +118,14 @@ class Simulator:
             self.axis.set_xlim(self.car.state[0] - 200, self.car.state[0] + 200)
             self.axis.set_ylim(self.car.state[1] - 200, self.car.state[1] + 200)
 
-            desired = controller(self.car.state, self.car.parameters, self.rt)
+            desired, lookahead_point = controller(self.car.state, self.car.parameters, self.rt)
+            
+            self.axis.plot(
+                [self.car.state[0], lookahead_point[0]], 
+                [self.car.state[1], lookahead_point[1]], 
+                "-"
+            )
+
             cont = lower_controller(self.car.state, desired, self.car.parameters)
             self.car.update(cont)
             self.update_status()
