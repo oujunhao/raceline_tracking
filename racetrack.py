@@ -52,7 +52,27 @@ class RaceTrack:
         self.mpl_right_track_limit_patch = patches.PathPatch(self.mpl_right_track_limit, linestyle="--", fill=False, lw=0.2)
         self.mpl_left_track_limit_patch = patches.PathPatch(self.mpl_left_track_limit, linestyle="--", fill=False, lw=0.2)
 
+        self.raceline = None
+        self.mpl_raceline_patch = None
+
+    def load_raceline(self, filepath : str):
+        data = np.loadtxt(filepath, comments="#", delimiter=",")
+        self.raceline = data[:, 0:2]
+        # Ensure loop
+        if np.linalg.norm(self.raceline[0] - self.raceline[-1]) > 0.1:
+             self.raceline = np.vstack((self.raceline, self.raceline[0]))
+             
+        # Compute curvature for raceline
+        # We can reuse compute_curvature logic or just let controller handle it
+        # But controller expects 'racetrack' object. 
+        # We'll let controller handle curvature computation for whichever path it uses.
+
+        self.mpl_raceline = path.Path(self.raceline, self.code if len(self.raceline) == len(self.code) else None)
+        self.mpl_raceline_patch = patches.PathPatch(self.mpl_raceline, linestyle="-.", color="green", fill=False, lw=0.5)
+
     def plot_track(self, axis : axes.Axes):
         axis.add_patch(self.mpl_centerline_patch)
         axis.add_patch(self.mpl_right_track_limit_patch)
         axis.add_patch(self.mpl_left_track_limit_patch)
+        if self.mpl_raceline_patch:
+            axis.add_patch(self.mpl_raceline_patch)
