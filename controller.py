@@ -65,11 +65,10 @@ class LowerController:
         desired_angle, desired_velocity = desired
 
         # Steering PID
-        steering_error = (desired_angle - steering_angle) % (2 * math.pi)
-        while steering_error > math.pi:
-            steering_error -= 2 * math.pi
-        while steering_error < -math.pi:
-            steering_error += 2 * math.pi
+        steering_error = np.arctan2(
+            math.sin(desired_angle - steering_angle),
+            math.cos(desired_angle - steering_angle)
+        )
         self.integral_steering_error += steering_error
         steering_derivative = steering_error - self.prev_steering_error
         self.prev_steering_error = steering_error
@@ -107,7 +106,7 @@ def controller(
     # New velocity is proportional to the distance to the lookahead point
     distance_to_lookahead = np.linalg.norm(lookahead_point - np.array([x, y]))
     desired_velocity = min(150.0, distance_to_lookahead * 2.0)
-    desired_velocity = 50
+    desired_velocity = 10
     
     
     return np.array([desired_angle, desired_velocity]).T, lookahead_point

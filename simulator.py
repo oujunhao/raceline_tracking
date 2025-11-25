@@ -126,6 +126,15 @@ class Simulator:
                 "-"
             )
 
+            # Plot desired heading/velocity vector
+            global_des_angle = self.car.state[2] + desired[0]
+            self.axis.arrow(
+                self.car.state[0], self.car.state[1], 
+                desired[1] * np.cos(global_des_angle), 
+                desired[1] * np.sin(global_des_angle),
+                color='orange', head_width=2.0
+            )
+
             cont = lower_controller(self.car.state, desired, self.car.parameters)
             self.car.update(cont)
             self.update_status()
