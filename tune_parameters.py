@@ -32,17 +32,18 @@ PARAM_RANGES = {
 }
 
 # Tracks to use for tuning
-TRACKS_DIR = "racetracks"
+TRACKS_DIR = "racetrack-database"
 
 def get_tracks():
-    track_files = glob.glob(os.path.join(TRACKS_DIR, "*.csv"))
+    tracks_sub_dir = os.path.join(TRACKS_DIR, "tracks")
+    racelines_sub_dir = os.path.join(TRACKS_DIR, "racelines")
+
+    track_files = glob.glob(os.path.join(tracks_sub_dir, "*.csv"))
     tracks = []
     for tf in track_files:
-        if "_raceline" in tf:
-            continue
+        base_name = os.path.basename(tf)
+        raceline_file = os.path.join(racelines_sub_dir, base_name)
         
-        base_name = os.path.splitext(os.path.basename(tf))[0]
-        raceline_file = os.path.join(TRACKS_DIR, f"{base_name}_raceline.csv")
         if not os.path.exists(raceline_file):
             raceline_file = None
         

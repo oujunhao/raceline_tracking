@@ -27,6 +27,9 @@ def run_headless(track_file, raceline_file=None, max_steps=20000):
     violations = 0
     currently_violating = False
     
+    total_points = len(racetrack.centerline)
+    last_closest_idx = 0
+
     for step in range(max_steps):
         # Get control
         desired, lookahead_point = controller(car.state, car.parameters, racetrack)
@@ -36,24 +39,24 @@ def run_headless(track_file, raceline_file=None, max_steps=20000):
         time_elapsed += dt
         
         # Check progress
-        progress = np.linalg.norm(car.state[0:2] - racetrack.centerline[0, 0:2], 2)
-        
-        if progress > 10.0 and not lap_started:
-            lap_started = True
-            start_time = time_elapsed
-            
-        if progress <= 5.0 and lap_started and not lap_finished:
-            if time_elapsed - start_time > 10.0:
-                lap_finished = True
-                lap_time = time_elapsed - start_time
-                print(f"Lap finished! Time: {lap_time:.2f}s, Violations: {violations}")
-                return lap_time, violations
-        
-        # Check violations
         car_position = car.state[0:2]
         centerline_distances = np.linalg.norm(racetrack.centerline - car_position, axis=1)
         closest_idx = np.argmin(centerline_distances)
         
+        if not lap_started:
+            if closest_idx > total_points * 0.05 and closest_idx < total_points * 0.5:
+                lap_started = True
+                
+        if lap_started and not lap_finished:
+            if last_closest_idx > total_points * 0.9 and closest_idx < total_points * 0.1:
+                lap_finished = True
+                lap_time = time_elapsed
+                print(f"Lap finished! Time: {lap_time:.2f}s, Violations: {violations}")
+                return lap_time, violations
+        
+        last_closest_idx = closest_idx
+        
+        # Check violations
         to_right = racetrack.right_boundary[closest_idx] - racetrack.centerline[closest_idx]
         to_left = racetrack.left_boundary[closest_idx] - racetrack.centerline[closest_idx]
         to_car = car_position - racetrack.centerline[closest_idx]

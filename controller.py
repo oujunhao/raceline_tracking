@@ -7,17 +7,17 @@ from racetrack import RaceTrack
 # Global configuration for the controller
 # This allows external tuning (e.g. by a genetic algorithm)
 CONTROLLER_CONFIG = {
-    "steering_kp": 8.3590,
+    "steering_kp": 8.0315,
     "steering_ki": 0.0000,
-    "steering_kd": 0.0000,
-    "velocity_kp": 206.0636,
-    "velocity_ki": 0.0000,
-    "velocity_kd": 2.2261,
-    "lookahead_k": 0.2023,
-    "lookahead_L0": 10.0000,
-    "braking_factor": 1.0959,
-    "steer_limit_factor": 0.9049,
-    "lookahead_brake_scale": 5.0000,
+    "steering_kd": 0.9600,
+    "velocity_kp": 127.3380,
+    "velocity_ki": 0.0827,
+    "velocity_kd": 3.6845,
+    "lookahead_k": 0.1264,
+    "lookahead_L0": 9.5894,
+    "braking_factor": 1.1098,
+    "steer_limit_factor": 0.5000,
+    "lookahead_brake_scale": 3.1451,
 }
 
 def get_next_point(
