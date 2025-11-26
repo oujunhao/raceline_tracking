@@ -13,11 +13,11 @@ CONTROLLER_CONFIG = {
     "velocity_kp": 127.3380,
     "velocity_ki": 0.0827,
     "velocity_kd": 3.6845,
-    "lookahead_k": 0.1264,
+    "lookahead_k": 0.1591,
     "lookahead_L0": 9.5894,
-    "braking_factor": 1.1098,
-    "steer_limit_factor": 0.5000,
-    "lookahead_brake_scale": 3.1451,
+    "braking_factor": 1.1275,
+    "steer_limit_factor": 0.7101,
+    "lookahead_brake_scale": 2.0344,
 }
 
 def get_next_point(

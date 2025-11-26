@@ -25,7 +25,7 @@ PARAM_RANGES = {
     "velocity_ki": (0.0, 2.0),
     "velocity_kd": (0.0, 15.0),
     "lookahead_k": (0.05, 0.3),
-    "lookahead_L0": (2.0, 10.0),
+    "lookahead_L0": (2.0, 15.0),
     "braking_factor": (0.8, 1.2),
     "steer_limit_factor": (0.5, 1.5),
     "lookahead_brake_scale": (1.0, 5.0)
@@ -107,7 +107,7 @@ def crossover(p1, p2):
             child[k] = p2[k]
     return child
 
-def mutate(individual, mutation_rate=0.3, mutation_scale=0.2):
+def mutate(individual, mutation_rate=0.5, mutation_scale=0.3):
     mutated = individual.copy()
     for k, v in PARAM_RANGES.items():
         if random.random() < mutation_rate:
@@ -125,7 +125,7 @@ def run_optimization():
     population = [random_individual() for _ in range(POP_SIZE)]
     # Include current config as a starting point
     current_config = {k: CONTROLLER_CONFIG[k] for k in PARAM_RANGES.keys()}
-    population[0] = current_config
+    # population[0] = current_config
     
     tracks = get_tracks()
     print(f"Starting optimization with {POP_SIZE} individuals for {GENERATIONS} generations.")
