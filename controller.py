@@ -4,6 +4,22 @@ from numpy.typing import ArrayLike
 
 from racetrack import RaceTrack
 
+# Global configuration for the controller
+# This allows external tuning (e.g. by a genetic algorithm)
+CONTROLLER_CONFIG = {
+    "steering_kp": 10.0,
+    "steering_ki": 0.0,
+    "steering_kd": 6.2008,
+    "velocity_kp": 145.6623,
+    "velocity_ki": 0.0,
+    "velocity_kd": 7.9026,
+    "lookahead_k": 0.1,
+    "lookahead_L0": 7.0,
+    "braking_factor": 0.96,
+    "steer_limit_factor": 0.88,
+    "lookahead_brake_scale": 3.0
+}
+
 def get_next_point(
     state : ArrayLike, racetrack : RaceTrack
 ) -> ArrayLike:
@@ -18,8 +34,8 @@ def get_next_point(
     # Pure Pursuit Lookahead
     # Lookahead distance Ld
     # Ld = k * v + L0
-    k = 0.3
-    L0 = 5.0
+    k = CONTROLLER_CONFIG["lookahead_k"]
+    L0 = CONTROLLER_CONFIG["lookahead_L0"]
     Ld = k * lng_velocity + L0
     
     # Find point at distance Ld
@@ -55,14 +71,16 @@ class LowerController:
         self.prev_velocity_error = 0.0
         self.integral_velocity_error = 0.0
 
-        # PID constants
-        self.steering_kp = 15.0
-        self.steering_ki = 0.0
-        self.steering_kd = 1.0
+        # PID constants are now pulled from the global config when called, 
+        # or we can update them. For now, let's initialize with them 
+        # but the __call__ will use the instance variables, which we can update externally.
+        self.steering_kp = CONTROLLER_CONFIG["steering_kp"]
+        self.steering_ki = CONTROLLER_CONFIG["steering_ki"]
+        self.steering_kd = CONTROLLER_CONFIG["steering_kd"]
 
-        self.velocity_kp = 25.0
-        self.velocity_ki = 0.0
-        self.velocity_kd = 0.1
+        self.velocity_kp = CONTROLLER_CONFIG["velocity_kp"]
+        self.velocity_ki = CONTROLLER_CONFIG["velocity_ki"]
+        self.velocity_kd = CONTROLLER_CONFIG["velocity_kd"]
 
     def __call__(self, state: ArrayLike, desired: ArrayLike, parameters: ArrayLike) -> ArrayLike:
         # [steer angle, velocity]
@@ -160,8 +178,8 @@ def controller(
     # Pure Pursuit Lookahead
     # Lookahead distance Ld
     # Ld = k * v + L0
-    k = 0.2
-    L0 = 4.0
+    k = CONTROLLER_CONFIG["lookahead_k"]
+    L0 = CONTROLLER_CONFIG["lookahead_L0"]
     Ld = k * lng_velocity + L0
     
     # Find point at distance Ld
@@ -198,36 +216,70 @@ def controller(
 
     # Velocity Control: Curvature-based
     
-    # Look ahead for max curvature
-    # We need to look ahead based on stopping distance
-    # d_stop = v^2 / (2*a_max)
-    # a_max braking is ~20 m/s^2
-    stopping_dist = (lng_velocity**2) / (2 * 20.0)
-    lookahead_dist = max(stopping_dist * 0.4, 10.0) # Min lookahead 10m
+    # Extract parameters
+    max_velocity = parameters[5]
+    max_accel = parameters[10]
+    max_steer_vel = parameters[9]
+    wheelbase = parameters[0]
     
-    max_k = 0.0
+    current_steering_angle = state[2]
+    
+    # Look ahead for max curvature
+    lookahead_dist = (max_velocity**2) / (2 * max_accel) * CONTROLLER_CONFIG["lookahead_brake_scale"]
+    
     current_dist = 0.0
     idx = closest_index
     
+    min_v_target = max_velocity
+    
+    # Safety margin for braking
+    effective_braking_accel = max_accel * CONTROLLER_CONFIG["braking_factor"]
+    
+    # Track steering angle along the path
+    # Start from the path's required steering, not current car steering
+    # This prevents slowing down just because we are correcting an error
+    prev_steering_req = np.arctan(wheelbase * curvature[idx])
+    
     while current_dist < lookahead_dist:
+        prev_idx = idx
         idx = (idx + 1) % len(path_points)
-        k = curvature[idx]
-        if k > max_k:
-            max_k = k
         
-        # Approx distance
-        current_dist += np.linalg.norm(path_points[idx] - path_points[idx-1])
+        dist_step = np.linalg.norm(path_points[idx] - path_points[prev_idx])
+        if dist_step < 1e-3: continue
+        
+        k = curvature[idx]
+        
+        # Required steering angle for this curvature
+        steering_req = np.arctan(wheelbase * k)
+        
+        # Limit based on changing steering from previous point to this point
+        delta_diff = abs(steering_req - prev_steering_req)
+        
+        # Ignore small steering changes (noise)
+        if delta_diff > 1e-3:
+            v_steer_limit = (dist_step * max_steer_vel * CONTROLLER_CONFIG["steer_limit_factor"]) / delta_diff
+        else:
+            v_steer_limit = max_velocity
+            
+        # Update prev for next step
+        prev_steering_req = steering_req
+        
+        # Also limit based on getting from CURRENT state to this point?
+        # v_transition = current_dist * max_steer_vel / abs(steering_req - current_steering_angle)
+        # This is implicitly handled by the integration of segments if we start from current.
+        
+        v_corner = min(max_velocity, v_steer_limit)
+        
+        # Calculate max velocity we can have NOW
+        v_allowable = np.sqrt(v_corner**2 + 2 * effective_braking_accel * current_dist)
+        
+        if v_allowable < min_v_target:
+            min_v_target = v_allowable
+        
+        current_dist += dist_step
         if idx == closest_index: break
             
-    # V = sqrt(a_lat / k)
-    # a_lat max ~ 15 m/s^2 (tuned for stability)
-    a_lat_max = 80.0 
-    if max_k > 1e-3:
-        v_limit = np.sqrt(a_lat_max / max_k)
-    else:
-        v_limit = 120.0 # Max speed
-        
-    desired_velocity = min(120.0, v_limit)
-    desired_velocity = max(desired_velocity, 10.0) # Min speed
+    desired_velocity = min(max_velocity, min_v_target)
+    desired_velocity = max(desired_velocity, 0.0)
     
     return np.array([desired_angle, desired_velocity]).T, target_point
