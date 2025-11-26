@@ -17,37 +17,31 @@ class Simulator:
         matplotlib.rcParams["font.size"] = 8
 
         self.rt = rt
-        self.figure, self.axis = plt.subplots(1, 1, figsize=(12, 7.5))
-        plt.subplots_adjust(bottom=0.25)
+        self.figure, self.axis = plt.subplots(1, 1, figsize=(12, 8))
+        plt.subplots_adjust(bottom=0.35)
 
         self.axis.set_xlabel("X"); self.axis.set_ylabel("Y")
 
-        self.car = RaceCar(self.rt.initial_state.T)
-
-        self.lap_time_elapsed = 0
-        self.lap_start_time = None
-        self.lap_finished = False
-        self.lap_started = False
-        self.track_limit_violations = 0
-        self.currently_violating = False
-
         # Sliders
         axcolor = 'lightgoldenrodyellow'
-        ax_kp = plt.axes([0.25, 0.1, 0.65, 0.03], facecolor=axcolor)
-        ax_ki = plt.axes([0.25, 0.06, 0.65, 0.03], facecolor=axcolor)
-        ax_kd = plt.axes([0.25, 0.02, 0.65, 0.03], facecolor=axcolor)
+        
+        # Steer
+        ax_kp = plt.axes([0.15, 0.20, 0.75, 0.03], facecolor=axcolor)
+        ax_ki = plt.axes([0.15, 0.16, 0.75, 0.03], facecolor=axcolor)
+        ax_kd = plt.axes([0.15, 0.12, 0.75, 0.03], facecolor=axcolor)
 
-        ax_vkp = plt.axes([0.25, 0.22, 0.65, 0.03], facecolor=axcolor)
-        ax_vki = plt.axes([0.25, 0.18, 0.65, 0.03], facecolor=axcolor)
-        ax_vkd = plt.axes([0.25, 0.14, 0.65, 0.03], facecolor=axcolor)
+        # Velocity
+        ax_vkp = plt.axes([0.15, 0.08, 0.75, 0.03], facecolor=axcolor)
+        ax_vki = plt.axes([0.15, 0.04, 0.75, 0.03], facecolor=axcolor)
+        ax_vkd = plt.axes([0.15, 0.00, 0.75, 0.03], facecolor=axcolor)
 
-        self.slider_kp = Slider(ax_kp, 'Steer Kp', 0.0, 20.0, valinit=lower_controller.steering_kp)
-        self.slider_ki = Slider(ax_ki, 'Steer Ki', 0.0, 1.0, valinit=lower_controller.steering_ki)
-        self.slider_kd = Slider(ax_kd, 'Steer Kd', 0.0, 5.0, valinit=lower_controller.steering_kd)
+        self.slider_kp = Slider(ax_kp, 'Steer Kp', 5.0, 15.0, valinit=lower_controller.steering_kp, valstep=0.01)
+        self.slider_ki = Slider(ax_ki, 'Steer Ki', 0.0, 1.0, valinit=lower_controller.steering_ki, valstep=0.001)
+        self.slider_kd = Slider(ax_kd, 'Steer Kd', 3.0, 9.0, valinit=lower_controller.steering_kd, valstep=0.01)
 
-        self.slider_vkp = Slider(ax_vkp, 'Vel Kp', 0.0, 20.0, valinit=lower_controller.velocity_kp)
-        self.slider_vki = Slider(ax_vki, 'Vel Ki', 0.0, 1.0, valinit=lower_controller.velocity_ki)
-        self.slider_vkd = Slider(ax_vkd, 'Vel Kd', 0.0, 5.0, valinit=lower_controller.velocity_kd)
+        self.slider_vkp = Slider(ax_vkp, 'Vel Kp', 100.0, 200.0, valinit=lower_controller.velocity_kp, valstep=0.1)
+        self.slider_vki = Slider(ax_vki, 'Vel Ki', 0.0, 1.0, valinit=lower_controller.velocity_ki, valstep=0.001)
+        self.slider_vkd = Slider(ax_vkd, 'Vel Kd', 4.0, 12.0, valinit=lower_controller.velocity_kd, valstep=0.01)
 
         self.slider_kp.on_changed(self.update_sliders)
         self.slider_ki.on_changed(self.update_sliders)
@@ -55,11 +49,9 @@ class Simulator:
         self.slider_vkp.on_changed(self.update_sliders)
         self.slider_vki.on_changed(self.update_sliders)
         self.slider_vkd.on_changed(self.update_sliders)
-
-        # Reset Button
-        resetax = plt.axes([0.025, 0.05, 0.1, 0.04])
-        self.button = Button(resetax, 'Reset', color=axcolor, hovercolor='0.975')
-        self.button.on_clicked(self.reset_simulation)
+        
+        # Initial run
+        self.update_sliders(None)
 
     def update_sliders(self, val):
         lower_controller.steering_kp = self.slider_kp.val
@@ -68,144 +60,100 @@ class Simulator:
         lower_controller.velocity_kp = self.slider_vkp.val
         lower_controller.velocity_ki = self.slider_vki.val
         lower_controller.velocity_kd = self.slider_vkd.val
-
-    def reset_simulation(self, event):
-        self.car = RaceCar(self.rt.initial_state.T)
-        self.lap_time_elapsed = 0
-        self.lap_start_time = time()
-        self.lap_finished = False
-        self.lap_started = False
-        self.track_limit_violations = 0
-        self.currently_violating = False
         
+        self.simulate_lap()
+        self.plot_results()
+
+    def simulate_lap(self):
+        self.car = RaceCar(self.rt.initial_state.T)
         lower_controller.prev_steering_error = 0.0
         lower_controller.integral_steering_error = 0.0
         lower_controller.prev_velocity_error = 0.0
         lower_controller.integral_velocity_error = 0.0
-
-    def check_track_limits(self):
-        car_position = self.car.state[0:2]
         
-        min_dist_right = float('inf')
-        min_dist_left = float('inf')
+        dt = self.car.time_step
+        max_steps = 2000 
         
-        for i in range(len(self.rt.right_boundary)):
-            dist_right = np.linalg.norm(car_position - self.rt.right_boundary[i])
-            dist_left = np.linalg.norm(car_position - self.rt.left_boundary[i])
+        self.trajectory = []
+        self.violation_points = []
+        self.lap_finished = False
+        self.lap_time = 0.0
+        self.violations = 0
+        
+        lap_started = False
+        time_elapsed = 0.0
+        currently_violating = False
+        
+        total_points = len(self.rt.centerline)
+        last_closest_idx = 0
+        
+        for _ in range(max_steps):
+            self.trajectory.append(self.car.state[0:2].copy())
             
-            if dist_right < min_dist_right:
-                min_dist_right = dist_right
-            if dist_left < min_dist_left:
-                min_dist_left = dist_left
-        
-        centerline_distances = np.linalg.norm(self.rt.centerline - car_position, axis=1)
-        closest_idx = np.argmin(centerline_distances)
-        
-        to_right = self.rt.right_boundary[closest_idx] - self.rt.centerline[closest_idx]
-        to_left = self.rt.left_boundary[closest_idx] - self.rt.centerline[closest_idx]
-        to_car = car_position - self.rt.centerline[closest_idx]
-        
-        right_dist = np.linalg.norm(to_right)
-        left_dist = np.linalg.norm(to_left)
-        
-        proj_right = np.dot(to_car, to_right) / right_dist if right_dist > 0 else 0
-        proj_left = np.dot(to_car, to_left) / left_dist if left_dist > 0 else 0
-        
-        is_violating = proj_right > right_dist or proj_left > left_dist
-        
-        if is_violating and not self.currently_violating:
-            self.track_limit_violations += 1
-            self.currently_violating = True
-        elif not is_violating:
-            self.currently_violating = False
-
-    def run(self):
-        try:
-            if self.lap_finished:
-                exit()
-
-            self.figure.canvas.flush_events()
-            self.axis.cla()
-
-            self.rt.plot_track(self.axis)
-
-            self.axis.set_xlim(self.car.state[0] - 200, self.car.state[0] + 200)
-            self.axis.set_ylim(self.car.state[1] - 200, self.car.state[1] + 200)
-
-            desired, lookahead_point = controller(self.car.state, self.car.parameters, self.rt)
-            
-            self.axis.plot(
-                [self.car.state[0], lookahead_point[0]], 
-                [self.car.state[1], lookahead_point[1]], 
-                "-"
-            )
-
-            # Plot desired heading/velocity vector
-            global_des_angle = self.car.state[4] + desired[0]
-            self.axis.arrow(
-                self.car.state[0], self.car.state[1], 
-                desired[1] * np.cos(global_des_angle), 
-                desired[1] * np.sin(global_des_angle),
-                color='orange', head_width=2.0
-            )
-
+            desired, _ = controller(self.car.state, self.car.parameters, self.rt)
             cont = lower_controller(self.car.state, desired, self.car.parameters)
             self.car.update(cont)
-            self.update_status()
-            self.check_track_limits()
+            
+            time_elapsed += dt
+            
+            # Progress
+            car_position = self.car.state[0:2]
+            dists = np.linalg.norm(self.rt.centerline - car_position, axis=1)
+            closest_idx = np.argmin(dists)
+            
+            if not lap_started:
+                if closest_idx > total_points * 0.05 and closest_idx < total_points * 0.5:
+                    lap_started = True
+                    
+            if lap_started and not self.lap_finished:
+                if last_closest_idx > total_points * 0.9 and closest_idx < total_points * 0.1:
+                    self.lap_finished = True
+                    self.lap_time = time_elapsed
+                    break
+            
+            last_closest_idx = closest_idx
+            
+            # Violations
+            to_right = self.rt.right_boundary[closest_idx] - self.rt.centerline[closest_idx]
+            to_left = self.rt.left_boundary[closest_idx] - self.rt.centerline[closest_idx]
+            to_car = car_position - self.rt.centerline[closest_idx]
+            
+            right_dist = np.linalg.norm(to_right)
+            left_dist = np.linalg.norm(to_left)
+            
+            proj_right = np.dot(to_car, to_right) / right_dist if right_dist > 0 else 0
+            proj_left = np.dot(to_car, to_left) / left_dist if left_dist > 0 else 0
+            
+            is_violating = proj_right > right_dist or proj_left > left_dist
+            
+            if is_violating:
+                self.violation_points.append(car_position.copy())
+                if not currently_violating:
+                    self.violations += 1
+                    currently_violating = True
+            else:
+                currently_violating = False
 
-            self.axis.arrow(
-                self.car.state[0], self.car.state[1], \
-                self.car.wheelbase*np.cos(self.car.state[4]), \
-                self.car.wheelbase*np.sin(self.car.state[4])
-            )
-
-            self.axis.text(
-                self.car.state[0] + 195, self.car.state[1] + 195, "Lap completed: " + str(self.lap_finished),
-                horizontalalignment="right", verticalalignment="top",
-                fontsize=8, color="Red"
-            )
-
-            self.axis.text(
-                self.car.state[0] + 195, self.car.state[1] + 170, "Lap time: " + f"{self.lap_time_elapsed:.2f}",
-                horizontalalignment="right", verticalalignment="top",
-                fontsize=8, color="Red"
-            )
-
-            self.axis.text(
-                self.car.state[0] + 195, self.car.state[1] + 155, "Track violations: " + str(self.track_limit_violations),
-                horizontalalignment="right", verticalalignment="top",
-                fontsize=8, color="Red"
-            )
-
-            self.axis.text(
-                self.car.state[0] + 195, self.car.state[1] + 140, "Velocity: " + f"{self.car.state[3]:.2f} m/s",
-                horizontalalignment="right", verticalalignment="top",
-                fontsize=8, color="Red"
-            )
-
-            self.figure.canvas.draw()
-            return True
-
-        except KeyboardInterrupt:
-            exit()
-
-    def update_status(self):
-        progress = np.linalg.norm(self.car.state[0:2] - self.rt.centerline[0, 0:2], 2)
-
-        if progress > 10.0 and not self.lap_started:
-            self.lap_started = True
-    
-        if progress <= 1.0 and self.lap_started and not self.lap_finished:
-            self.lap_finished = True
-            self.lap_time_elapsed = time() - self.lap_start_time
-
-        if not self.lap_finished and self.lap_start_time is not None:
-            self.lap_time_elapsed = time() - self.lap_start_time
+    def plot_results(self):
+        self.axis.cla()
+        self.rt.plot_track(self.axis)
+        
+        traj = np.array(self.trajectory)
+        if len(traj) > 0:
+            self.axis.plot(traj[:, 0], traj[:, 1], 'b-', linewidth=1)
+            
+        if len(self.violation_points) > 0:
+            v_pts = np.array(self.violation_points)
+            self.axis.plot(v_pts[:, 0], v_pts[:, 1], 'r.', markersize=3)
+            
+        info_text = f"Lap Time: {self.lap_time:.2f}s\nViolations: {self.violations}"
+        if not self.lap_finished:
+            info_text = "Lap DNF\nViolations: " + str(self.violations)
+            
+        self.axis.text(0.02, 0.98, info_text, transform=self.axis.transAxes, 
+                       verticalalignment='top', bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+        
+        self.figure.canvas.draw_idle()
 
     def start(self):
-        # Run the simulation loop every 1 millisecond.
-        self.timer = self.figure.canvas.new_timer(interval=1)
-        self.timer.add_callback(self.run)
-        self.lap_start_time = time()
-        self.timer.start()
+        pass
