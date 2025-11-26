@@ -141,7 +141,7 @@ class Simulator:
             )
 
             # Plot desired heading/velocity vector
-            global_des_angle = self.car.state[2] + desired[0]
+            global_des_angle = self.car.state[4] + desired[0]
             self.axis.arrow(
                 self.car.state[0], self.car.state[1], 
                 desired[1] * np.cos(global_des_angle), 
@@ -174,6 +174,12 @@ class Simulator:
 
             self.axis.text(
                 self.car.state[0] + 195, self.car.state[1] + 155, "Track violations: " + str(self.track_limit_violations),
+                horizontalalignment="right", verticalalignment="top",
+                fontsize=8, color="Red"
+            )
+
+            self.axis.text(
+                self.car.state[0] + 195, self.car.state[1] + 140, "Velocity: " + f"{self.car.state[3]:.2f} m/s",
                 horizontalalignment="right", verticalalignment="top",
                 fontsize=8, color="Red"
             )
