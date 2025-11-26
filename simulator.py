@@ -3,6 +3,8 @@ import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider, Button
+from matplotlib.collections import LineCollection
+from matplotlib.colors import Normalize
 
 from time import time
 
@@ -17,23 +19,76 @@ class Simulator:
         matplotlib.rcParams["font.size"] = 8
 
         self.rt = rt
-        self.figure, self.axis = plt.subplots(1, 1, figsize=(12, 8))
-        plt.subplots_adjust(bottom=0.35)
+        
+        # Auto-rotate if track is tall
+        w = np.max(self.rt.centerline[:, 0]) - np.min(self.rt.centerline[:, 0])
+        h = np.max(self.rt.centerline[:, 1]) - np.min(self.rt.centerline[:, 1])
+        
+        if h > w * 1.2:
+            print("Auto-rotating track 90 degrees CW for better fit")
+            # Rotate points: x' = y, y' = -x
+            def rot(pts):
+                return np.column_stack((pts[:, 1], -pts[:, 0]))
+                
+            self.rt.centerline = rot(self.rt.centerline)
+            self.rt.right_boundary = rot(self.rt.right_boundary)
+            self.rt.left_boundary = rot(self.rt.left_boundary)
+            if self.rt.raceline is not None:
+                self.rt.raceline = rot(self.rt.raceline)
+                
+            # Rotate initial state: [x, y, steer, vel, heading]
+            x, y, s, v, head = self.rt.initial_state
+            self.rt.initial_state = np.array([y, -x, s, v, head - np.pi/2])
+            
+            # Update MPL paths
+            self.rt.mpl_centerline.vertices = self.rt.centerline
+            self.rt.mpl_right_track_limit.vertices = self.rt.right_boundary
+            self.rt.mpl_left_track_limit.vertices = self.rt.left_boundary
+            if self.rt.raceline is not None:
+                self.rt.mpl_raceline.vertices = self.rt.raceline
 
-        self.axis.set_xlabel("X"); self.axis.set_ylabel("Y")
+        self.figure, self.axis = plt.subplots(1, 1)
+        try:
+            mng = plt.get_current_fig_manager()
+            mng.full_screen_toggle()
+        except:
+            self.figure.set_size_inches(16, 9)
+            
+        plt.subplots_adjust(left=0.0, right=0.82, bottom=0.0, top=1.0)
+
+        self.axis.set_axis_off()
+
+        # Track limits
+        buff = 50
+        self.min_x = np.min(self.rt.centerline[:, 0]) - buff
+        self.max_x = np.max(self.rt.centerline[:, 0]) + buff
+        self.min_y = np.min(self.rt.centerline[:, 1]) - buff
+        self.max_y = np.max(self.rt.centerline[:, 1]) + buff
+
+        # Dynamic layout
+        track_ratio = (self.max_x - self.min_x) / (self.max_y - self.min_y)
+        screen_ratio = 16/9
+        needed_width = (track_ratio / screen_ratio) + 0.15
+        plot_right = np.clip(needed_width, 0.4, 0.80)
+        
+        plt.subplots_adjust(left=0.0, right=plot_right, bottom=0.0, top=1.0)
+        self.axis.set_axis_off()
 
         # Sliders
         axcolor = 'lightgoldenrodyellow'
         
+        self.sx = plot_right + 0.05
+        self.sw = 0.95 - self.sx
+        
         # Steer
-        ax_kp = plt.axes([0.15, 0.20, 0.75, 0.03], facecolor=axcolor)
-        ax_ki = plt.axes([0.15, 0.16, 0.75, 0.03], facecolor=axcolor)
-        ax_kd = plt.axes([0.15, 0.12, 0.75, 0.03], facecolor=axcolor)
+        ax_kp = plt.axes([self.sx, 0.80, self.sw, 0.03], facecolor=axcolor)
+        ax_ki = plt.axes([self.sx, 0.75, self.sw, 0.03], facecolor=axcolor)
+        ax_kd = plt.axes([self.sx, 0.70, self.sw, 0.03], facecolor=axcolor)
 
         # Velocity
-        ax_vkp = plt.axes([0.15, 0.08, 0.75, 0.03], facecolor=axcolor)
-        ax_vki = plt.axes([0.15, 0.04, 0.75, 0.03], facecolor=axcolor)
-        ax_vkd = plt.axes([0.15, 0.00, 0.75, 0.03], facecolor=axcolor)
+        ax_vkp = plt.axes([self.sx, 0.60, self.sw, 0.03], facecolor=axcolor)
+        ax_vki = plt.axes([self.sx, 0.55, self.sw, 0.03], facecolor=axcolor)
+        ax_vkd = plt.axes([self.sx, 0.50, self.sw, 0.03], facecolor=axcolor)
 
         self.slider_kp = Slider(ax_kp, 'Steer Kp', 5.0, 15.0, valinit=lower_controller.steering_kp, valstep=0.01)
         self.slider_ki = Slider(ax_ki, 'Steer Ki', 0.0, 1.0, valinit=lower_controller.steering_ki, valstep=0.001)
@@ -49,6 +104,11 @@ class Simulator:
         self.slider_vkp.on_changed(self.update_sliders)
         self.slider_vki.on_changed(self.update_sliders)
         self.slider_vkd.on_changed(self.update_sliders)
+        
+        # Reset Button
+        resetax = plt.axes([self.sx, 0.40, self.sw*0.6, 0.04])
+        self.button = Button(resetax, 'Reset', color=axcolor, hovercolor='0.975')
+        self.button.on_clicked(self.reset_simulation)
         
         # Initial run
         self.update_sliders(None)
@@ -75,6 +135,7 @@ class Simulator:
         max_steps = 2000 
         
         self.trajectory = []
+        self.velocities = []
         self.violation_points = []
         self.lap_finished = False
         self.lap_time = 0.0
@@ -89,6 +150,7 @@ class Simulator:
         
         for _ in range(max_steps):
             self.trajectory.append(self.car.state[0:2].copy())
+            self.velocities.append(self.car.state[3])
             
             desired, _ = controller(self.car.state, self.car.parameters, self.rt)
             cont = lower_controller(self.car.state, desired, self.car.parameters)
@@ -136,11 +198,36 @@ class Simulator:
 
     def plot_results(self):
         self.axis.cla()
+        self.axis.set_xlim(self.min_x, self.max_x)
+        self.axis.set_ylim(self.min_y, self.max_y)
+        self.axis.set_aspect('equal')
         self.rt.plot_track(self.axis)
         
         traj = np.array(self.trajectory)
-        if len(traj) > 0:
-            self.axis.plot(traj[:, 0], traj[:, 1], 'b-', linewidth=1)
+        vels = np.array(self.velocities)
+        
+        if len(traj) > 1:
+            # Create a set of line segments so that we can color them individually
+            # This creates the points as a N x 1 x 2 array so that we can stack points
+            # together easily to get the segments. The segments array for line collection
+            # needs to be (num_lines) x (points_per_line) x 2 (for x and y)
+            points = traj.reshape(-1, 1, 2)
+            segments = np.concatenate([points[:-1], points[1:]], axis=1)
+
+            # Create a continuous norm to map from data points to colors
+            norm = Normalize(vmin=0, vmax=100) # Max velocity is 100
+            lc = LineCollection(segments, cmap='plasma', norm=norm)
+            
+            # Set the values used for colormapping
+            lc.set_array(vels[:-1])
+            lc.set_linewidth(2)
+            line = self.axis.add_collection(lc)
+            
+            # Add colorbar if it doesn't exist
+            if not hasattr(self, 'cbar'):
+                self.cbar = self.figure.colorbar(line, ax=self.axis, label='Velocity (m/s)')
+            else:
+                self.cbar.update_normal(line)
             
         if len(self.violation_points) > 0:
             v_pts = np.array(self.violation_points)
@@ -153,6 +240,19 @@ class Simulator:
         self.axis.text(0.02, 0.98, info_text, transform=self.axis.transAxes, 
                        verticalalignment='top', bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
         
+        self.figure.canvas.draw_idle()
+
+    def reset_simulation(self, event):
+        self.car = None
+        lower_controller.reset()
+        self.trajectory = []
+        self.violation_points = []
+        self.lap_finished = False
+        self.lap_time = 0.0
+        self.violations = 0
+
+        self.axis.cla()
+        self.rt.plot_track(self.axis)
         self.figure.canvas.draw_idle()
 
     def start(self):
