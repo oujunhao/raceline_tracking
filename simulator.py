@@ -10,7 +10,7 @@ from time import time
 
 from racetrack import RaceTrack
 from racecar import RaceCar
-from controller import lower_controller, controller
+from controller import lower_controller, controller, CONTROLLER_CONFIG
 
 class Simulator:
 
@@ -80,33 +80,62 @@ class Simulator:
         self.sx = plot_right + 0.05
         self.sw = 0.95 - self.sx
         
-        # Steer
-        ax_kp = plt.axes([self.sx, 0.80, self.sw, 0.03], facecolor=axcolor)
-        ax_ki = plt.axes([self.sx, 0.75, self.sw, 0.03], facecolor=axcolor)
-        ax_kd = plt.axes([self.sx, 0.70, self.sw, 0.03], facecolor=axcolor)
+        # Slider height and spacing
+        sh = 0.03
+        sp = 0.04
+        
+        # Starting Y positions
+        y_steer = 0.85
+        y_vel = y_steer - (3 * sp) - 0.02
+        y_look = y_vel - (3 * sp) - 0.02
+        y_dyn = y_look - (2 * sp) - 0.02
+        
+        # Steer PID
+        ax_kp = plt.axes([self.sx, y_steer, self.sw, sh], facecolor=axcolor)
+        ax_ki = plt.axes([self.sx, y_steer - sp, self.sw, sh], facecolor=axcolor)
+        ax_kd = plt.axes([self.sx, y_steer - 2*sp, self.sw, sh], facecolor=axcolor)
 
-        # Velocity
-        ax_vkp = plt.axes([self.sx, 0.60, self.sw, 0.03], facecolor=axcolor)
-        ax_vki = plt.axes([self.sx, 0.55, self.sw, 0.03], facecolor=axcolor)
-        ax_vkd = plt.axes([self.sx, 0.50, self.sw, 0.03], facecolor=axcolor)
+        # Velocity PID
+        ax_vkp = plt.axes([self.sx, y_vel, self.sw, sh], facecolor=axcolor)
+        ax_vki = plt.axes([self.sx, y_vel - sp, self.sw, sh], facecolor=axcolor)
+        ax_vkd = plt.axes([self.sx, y_vel - 2*sp, self.sw, sh], facecolor=axcolor)
+        
+        # Lookahead
+        ax_lk = plt.axes([self.sx, y_look, self.sw, sh], facecolor=axcolor)
+        ax_l0 = plt.axes([self.sx, y_look - sp, self.sw, sh], facecolor=axcolor)
+        
+        # Dynamics
+        ax_bf = plt.axes([self.sx, y_dyn, self.sw, sh], facecolor=axcolor)
+        ax_slf = plt.axes([self.sx, y_dyn - sp, self.sw, sh], facecolor=axcolor)
+        ax_lbs = plt.axes([self.sx, y_dyn - 2*sp, self.sw, sh], facecolor=axcolor)
 
-        self.slider_kp = Slider(ax_kp, 'Steer Kp', 5.0, 15.0, valinit=lower_controller.steering_kp, valstep=0.01)
-        self.slider_ki = Slider(ax_ki, 'Steer Ki', 0.0, 1.0, valinit=lower_controller.steering_ki, valstep=0.001)
-        self.slider_kd = Slider(ax_kd, 'Steer Kd', 3.0, 9.0, valinit=lower_controller.steering_kd, valstep=0.01)
+        # Sliders
+        self.slider_kp = Slider(ax_kp, 'Steer Kp', 0.0, 30.0, valinit=CONTROLLER_CONFIG["steering_kp"], valstep=0.1)
+        self.slider_ki = Slider(ax_ki, 'Steer Ki', 0.0, 5.0, valinit=CONTROLLER_CONFIG["steering_ki"], valstep=0.01)
+        self.slider_kd = Slider(ax_kd, 'Steer Kd', 0.0, 20.0, valinit=CONTROLLER_CONFIG["steering_kd"], valstep=0.1)
 
-        self.slider_vkp = Slider(ax_vkp, 'Vel Kp', 100.0, 200.0, valinit=lower_controller.velocity_kp, valstep=0.1)
-        self.slider_vki = Slider(ax_vki, 'Vel Ki', 0.0, 1.0, valinit=lower_controller.velocity_ki, valstep=0.001)
-        self.slider_vkd = Slider(ax_vkd, 'Vel Kd', 4.0, 12.0, valinit=lower_controller.velocity_kd, valstep=0.01)
+        self.slider_vkp = Slider(ax_vkp, 'Vel Kp', 0.0, 300.0, valinit=CONTROLLER_CONFIG["velocity_kp"], valstep=1.0)
+        self.slider_vki = Slider(ax_vki, 'Vel Ki', 0.0, 5.0, valinit=CONTROLLER_CONFIG["velocity_ki"], valstep=0.01)
+        self.slider_vkd = Slider(ax_vkd, 'Vel Kd', 0.0, 20.0, valinit=CONTROLLER_CONFIG["velocity_kd"], valstep=0.1)
+        
+        self.slider_lk = Slider(ax_lk, 'Lookahead K', 0.0, 0.5, valinit=CONTROLLER_CONFIG["lookahead_k"], valstep=0.01)
+        self.slider_l0 = Slider(ax_l0, 'Lookahead L0', 0.0, 15.0, valinit=CONTROLLER_CONFIG["lookahead_L0"], valstep=0.1)
+        
+        self.slider_bf = Slider(ax_bf, 'Brake Factor', 0.5, 1.5, valinit=CONTROLLER_CONFIG["braking_factor"], valstep=0.01)
+        self.slider_slf = Slider(ax_slf, 'Steer Lim Fac', 0.1, 2.0, valinit=CONTROLLER_CONFIG["steer_limit_factor"], valstep=0.01)
+        self.slider_lbs = Slider(ax_lbs, 'Look Brake Sc', 1.0, 10.0, valinit=CONTROLLER_CONFIG["lookahead_brake_scale"], valstep=0.1)
 
-        self.slider_kp.on_changed(self.update_sliders)
-        self.slider_ki.on_changed(self.update_sliders)
-        self.slider_kd.on_changed(self.update_sliders)
-        self.slider_vkp.on_changed(self.update_sliders)
-        self.slider_vki.on_changed(self.update_sliders)
-        self.slider_vkd.on_changed(self.update_sliders)
+        # Callbacks
+        sliders = [self.slider_kp, self.slider_ki, self.slider_kd,
+                   self.slider_vkp, self.slider_vki, self.slider_vkd,
+                   self.slider_lk, self.slider_l0,
+                   self.slider_bf, self.slider_slf, self.slider_lbs]
+                   
+        for s in sliders:
+            s.on_changed(self.update_sliders)
         
         # Reset Button
-        resetax = plt.axes([self.sx, 0.40, self.sw*0.6, 0.04])
+        resetax = plt.axes([self.sx, 0.25, self.sw*0.6, 0.04])
         self.button = Button(resetax, 'Reset', color=axcolor, hovercolor='0.975')
         self.button.on_clicked(self.reset_simulation)
         
@@ -114,12 +143,27 @@ class Simulator:
         self.update_sliders(None)
 
     def update_sliders(self, val):
+        # Update Lower Controller
         lower_controller.steering_kp = self.slider_kp.val
         lower_controller.steering_ki = self.slider_ki.val
         lower_controller.steering_kd = self.slider_kd.val
         lower_controller.velocity_kp = self.slider_vkp.val
         lower_controller.velocity_ki = self.slider_vki.val
         lower_controller.velocity_kd = self.slider_vkd.val
+        
+        # Update Global Config
+        CONTROLLER_CONFIG["steering_kp"] = self.slider_kp.val
+        CONTROLLER_CONFIG["steering_ki"] = self.slider_ki.val
+        CONTROLLER_CONFIG["steering_kd"] = self.slider_kd.val
+        CONTROLLER_CONFIG["velocity_kp"] = self.slider_vkp.val
+        CONTROLLER_CONFIG["velocity_ki"] = self.slider_vki.val
+        CONTROLLER_CONFIG["velocity_kd"] = self.slider_vkd.val
+        
+        CONTROLLER_CONFIG["lookahead_k"] = self.slider_lk.val
+        CONTROLLER_CONFIG["lookahead_L0"] = self.slider_l0.val
+        CONTROLLER_CONFIG["braking_factor"] = self.slider_bf.val
+        CONTROLLER_CONFIG["steer_limit_factor"] = self.slider_slf.val
+        CONTROLLER_CONFIG["lookahead_brake_scale"] = self.slider_lbs.val
         
         self.simulate_lap()
         self.plot_results()
